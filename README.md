@@ -1,6 +1,6 @@
 # CapsNow
 
-**Caps Lock, now. No delay, nothing running.**
+**Caps Lock without the delay.**
 
 <p align="center">
   <img src="docs/screenshot.png" width="572" alt="The CapsNow settings window">
@@ -8,20 +8,17 @@
 
 macOS ignores a Caps Lock press shorter than 75 milliseconds, on purpose, so that Caps Lock does not turn on by
 accident. The price is that quick taps get lost: you tap Caps Lock, keep typing, and the letters come out in the
-wrong case. CapsNow turns that delay off, so every press counts.
+wrong case. CapsNow turns that delay off, so a quick tap is enough.
 
 ## Nothing running
 
-- **0 MB of memory, 0 CPU.** CapsNow does not run in the background at all. macOS has a setting for this delay;
-  it is just not in System Settings and resets at every restart. CapsNow's helper sets it at login and whenever a
-  keyboard appears, then quits.
-- **No menu bar icon, no permissions.**
-- **Small.** The whole app is about 1 MB.
+macOS already has a setting for this delay. It just isn't in System Settings, and it resets at every restart.
+CapsNow's helper sets it at login and whenever a keyboard appears, then quits, so the rest of the time CapsNow uses
+no memory and no CPU at all. There is no menu bar icon and no permission to grant. The app is about 1 MB.
 
 ## Features
 
-- Works on every keyboard: built-in, USB and Bluetooth, including ones you connect later
-- Applied again automatically when a keyboard reconnects
+- Works on every keyboard (built-in, USB and Bluetooth), including ones you connect or reconnect later
 - Turning it off gives macOS its own delay back right away
 
 ## Requirements
@@ -47,7 +44,7 @@ open it and drag **CapsNow** to **Applications**. The app is signed with a Devel
 
 ### First run
 
-Open **CapsNow** and turn on **Enable CapsNow**. That's it. You can close the window: nothing needs to keep running.
+Open **CapsNow** and turn on **Enable CapsNow**. You can close the window right after; nothing has to stay open.
 
 ## How it works
 
@@ -93,6 +90,15 @@ background, it cannot notice being removed.
 /Applications/CapsNow.app/Contents/MacOS/capsnowd --status   # prints the current Caps Lock delay
 /Applications/CapsNow.app/Contents/MacOS/capsnowd --off      # gives macOS its own delay back
 ```
+
+## More small Mac apps
+
+- [NightKeys](https://github.com/fratayaydn/nightkeys): keyboard backlight that only comes on when you type on the
+  built-in keyboard
+- [BalanceKeeper](https://github.com/fratayaydn/balancekeeper): puts the left/right audio balance back when macOS
+  shifts it
+- [MicKeeper](https://github.com/fratayaydn/mickeeper): keeps AirPods and iPhones off the microphone, so AirPods don't
+  drop to call quality
 
 ## License
 
