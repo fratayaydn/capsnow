@@ -96,4 +96,4 @@ background, it cannot notice being removed.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT license, see [LICENSE](LICENSE).
