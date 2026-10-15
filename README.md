@@ -1,0 +1,99 @@
+# CapsNow
+
+**Caps Lock, now. No delay, nothing running.**
+
+<p align="center">
+  <img src="docs/screenshot.png" width="572" alt="The CapsNow settings window">
+</p>
+
+macOS ignores a Caps Lock press shorter than 75 milliseconds, on purpose, so that Caps Lock does not turn on by
+accident. The price is that quick taps get lost: you tap Caps Lock, keep typing, and the letters come out in the
+wrong case. CapsNow turns that delay off, so every press counts.
+
+## Nothing running
+
+- **0 MB of memory, 0 CPU.** CapsNow does not run in the background at all. macOS has a setting for this delay;
+  it is just not in System Settings and resets at every restart. CapsNow's helper sets it at login and whenever a
+  keyboard appears, then quits.
+- **No menu bar icon, no permissions.**
+- **Small.** The whole app is about 1 MB.
+
+## Features
+
+- Works on every keyboard: built-in, USB and Bluetooth, including ones you connect later
+- Applied again automatically when a keyboard reconnects
+- Turning it off gives macOS its own delay back right away
+
+## Requirements
+
+- A Mac with Apple silicon
+- macOS 13 Ventura or later
+
+Tested on a 14-inch MacBook Pro (Apple silicon) with macOS 26.7.1 Tahoe, with the built-in keyboard and a
+Bluetooth keyboard.
+
+## Install
+
+### Homebrew
+
+```sh
+brew install --cask fratayaydn/tap/capsnow
+```
+
+### Download
+
+Download `CapsNow-<version>.dmg` from the [latest release](https://github.com/fratayaydn/capsnow/releases/latest),
+open it and drag **CapsNow** to **Applications**. The app is signed with a Developer ID and notarized by Apple.
+
+### First run
+
+Open **CapsNow** and turn on **Enable CapsNow**. That's it. You can close the window: nothing needs to keep running.
+
+## How it works
+
+- macOS's keyboard filter delays Caps Lock by the keyboard's own delay (75 ms on Apple keyboards) unless the HID
+  property `CapsLockDelayOverride` says otherwise. CapsNow sets it to 0 through the public
+  `IOHIDEventSystemClient` API, the same setting `hidutil property --set '{"CapsLockDelayOverride":0}'` changes.
+- `CapsNow.app/Contents/MacOS/capsnowd` is registered as a login item through `SMAppService`, but it is not a
+  background process: its launchd job has no `KeepAlive`. launchd runs it at login and on an IOKit "keyboard
+  appeared" event, it sets the property and quits within two seconds.
+- Turning CapsNow off sets the property back to -1, the value macOS starts with, which means "no override".
+- `CapsNow.app/Contents/MacOS/CapsNow` is the SwiftUI settings window. It runs only while open.
+
+CapsNow uses only public macOS APIs.
+
+## Building from source
+
+Requires the Xcode Command Line Tools (`xcode-select --install`).
+
+```sh
+git clone https://github.com/fratayaydn/capsnow.git
+cd capsnow
+make install
+```
+
+This builds `CapsNow.app`, copies it to `/Applications` and opens it. To update, pull and run `make install` again.
+
+Local builds are signed with a self-signed certificate that `scripts/create-signing-identity.sh` creates on the
+first build, so the login item keeps working across rebuilds; `scripts/install.sh` re-registers it after each
+update. To sign with your own Apple Developer ID instead:
+`make install SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"`.
+
+## Uninstall
+
+Turn off **Enable CapsNow**, then move **CapsNow** to the Trash (or `brew uninstall --cask capsnow`).
+
+If you move it to the Trash without turning it off first, the delay stays off until the next restart, and then
+macOS's own delay is back: the setting never survives a restart on its own. Since CapsNow does not run in the
+background, it cannot notice being removed.
+
+## Command line
+
+```sh
+/Applications/CapsNow.app/Contents/MacOS/capsnowd --status   # prints the current Caps Lock delay
+/Applications/CapsNow.app/Contents/MacOS/capsnowd --off      # gives macOS its own delay back
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

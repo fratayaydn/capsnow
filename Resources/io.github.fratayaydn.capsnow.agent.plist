@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.github.fratayaydn.capsnow.agent</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/capsnowd</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>io.github.fratayaydn.capsnow</string>
+    </array>
+    <!-- Runs at login, then only when a keyboard appears; it applies the setting and quits each time. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>LaunchEvents</key>
+    <dict>
+        <key>com.apple.iokit.matching</key>
+        <dict>
+            <key>io.github.fratayaydn.capsnow.keyboard</key>
+            <dict>
+                <key>IOProviderClass</key>
+                <string>IOHIDEventService</string>
+                <key>PrimaryUsagePage</key>
+                <integer>1</integer>
+                <key>PrimaryUsage</key>
+                <integer>6</integer>
+                <key>IOMatchLaunchStream</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
+</dict>
+</plist>
