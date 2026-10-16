@@ -84,6 +84,10 @@ If you move it to the Trash without turning it off first, the delay stays off un
 macOS's own delay is back: the setting never survives a restart on its own. Since CapsNow does not run in the
 background, it cannot notice being removed.
 
+To remove the settings too, use `brew uninstall --zap --cask capsnow` instead, or run
+`defaults delete io.github.fratayaydn.capsnow` after moving the app to the Trash. If you built it from source,
+`make uninstall` in the cloned folder removes both the app and the settings.
+
 ## Command line
 
 ```sh
