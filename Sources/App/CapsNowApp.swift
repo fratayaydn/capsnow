@@ -48,11 +48,7 @@ final class Model: ObservableObject {
     var isEnabled: Bool { agentStatus == .enabled || agentStatus == .requiresApproval }
 
     func setEnabled(_ on: Bool) {
-        do {
-            if on { try agent.register() } else { try agent.unregister() }
-        } catch {
-            NSLog("CapsNow: could not \(on ? "register" : "unregister") the helper: \(error)")
-        }
+        if on { try? agent.register() } else { try? agent.unregister() }
         if on {
             startAgentOnce()
         } else {

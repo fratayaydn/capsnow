@@ -7,9 +7,11 @@
 //   capsnowd          apply the setting (what launchd runs)
 //   capsnowd --off    remove the override: macOS uses its own delay again
 //   capsnowd --status print the current delay
+//   capsnowd --log    print the running agent's diagnostic log (diagnostic builds only)
 #import <Foundation/Foundation.h>
 #include <IOKit/hidsystem/IOHIDEventSystemClient.h>
 #include <xpc/xpc.h>
+#import "DiagnosticLog.h"
 
 // Overrides the keyboard's own delay (75 ms on Apple keyboards). -1 means no override, the value the keyboard
 // filter starts with (IOHIDKeyboardFilter in Apple's IOHIDFamily); only values above 0 replace the delay, and 0
@@ -20,8 +22,13 @@
 static void setDelay(int ms) {
     IOHIDEventSystemClientRef client = IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault);
     CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ms);
-    if (!IOHIDEventSystemClientSetProperty(client, CAPS_LOCK_DELAY, n))
+    DIAG(@"set Caps Lock delay override=%d ms", ms);
+    if (!IOHIDEventSystemClientSetProperty(client, CAPS_LOCK_DELAY, n)) {
+        DIAG(@"could not set the Caps Lock delay");
         fprintf(stderr, "capsnowd: could not set the Caps Lock delay\n");
+    } else {
+        DIAG(@"Caps Lock delay override accepted=%d ms", ms);
+    }
     CFRelease(n);
     CFRelease(client);
 }
@@ -35,6 +42,7 @@ static void printStatus(void) {
     CFTypeRef value = IOHIDEventSystemClientCopyProperty(client, CAPS_LOCK_DELAY);
     int ms = -1;
     if (value && CFGetTypeID(value) == CFNumberGetTypeID()) CFNumberGetValue(value, kCFNumberIntType, &ms);
+    DIAG(@"Caps Lock delay status=%d ms (-1 means macOS default)", ms);
     if (ms >= 0) printf("Caps Lock delay: %d ms\n", ms);
     else printf("Caps Lock delay: macOS default\n");
     if (value) CFRelease(value);
@@ -43,18 +51,27 @@ static void printStatus(void) {
 
 int main(int argc, char **argv) {
     @autoreleasepool {
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
+        if (argc > 1 && !strcmp(argv[1], "--log")) return diagnosticPrint();
+        DIAG(@"agent start");
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDistributedCenter(), NULL, diagnosticRequested,
+                                        LOG_REQUEST, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+#endif
         if (argc > 1 && !strcmp(argv[1], "--status")) { printStatus(); return 0; }
         if (argc > 1 && !strcmp(argv[1], "--off")) { removeOverride(); return 0; }
 
         // launchd delivers the keyboard event that started us; it must be received, or launchd starts us again
         // for the same event.
         xpc_set_event_stream_handler("com.apple.iokit.matching", dispatch_get_main_queue(), ^(xpc_object_t event) {
+            DIAG(@"keyboard matching event");
             applyNoDelay();
         });
         applyNoDelay();
         // A keyboard can finish starting just after it matched: apply once more, then quit.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            DIAG(@"keyboard startup retry");
             applyNoDelay();
+            DIAG(@"agent exit");
             exit(0);
         });
         dispatch_main();
