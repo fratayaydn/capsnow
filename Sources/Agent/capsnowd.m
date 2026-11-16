@@ -25,7 +25,7 @@ static void setDelay(int ms) {
     DIAG(@"set Caps Lock delay override=%d ms", ms);
     if (!IOHIDEventSystemClientSetProperty(client, CAPS_LOCK_DELAY, n)) {
         DIAG(@"could not set the Caps Lock delay");
-        fprintf(stderr, "capsnowd: could not set the Caps Lock delay\n");
+        if (ms == NO_OVERRIDE) fprintf(stderr, "capsnowd: could not set the Caps Lock delay\n");
     } else {
         DIAG(@"Caps Lock delay override accepted=%d ms", ms);
     }
@@ -49,21 +49,46 @@ static void printStatus(void) {
     CFRelease(client);
 }
 
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
+static CFAbsoluteTime gDiagnosticLastEvent;
+
+static CFTimeInterval diagnosticExitDelay(CFAbsoluteTime lastEvent, CFAbsoluteTime now) {
+    return MAX(0, lastEvent + 300 - now);
+}
+
+static void diagnosticExitWhenIdle(void) {
+    CFTimeInterval delay = diagnosticExitDelay(gDiagnosticLastEvent, CFAbsoluteTimeGetCurrent());
+    if (delay == 0) {
+        DIAG(@"agent exit");
+        exit(0);
+    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ diagnosticExitWhenIdle(); });
+}
+#endif
+
 int main(int argc, char **argv) {
     @autoreleasepool {
 #ifdef CAPSNOW_DIAGNOSTIC_LOG
         if (argc > 1 && !strcmp(argv[1], "--log")) return diagnosticPrint();
-        DIAG(@"agent start");
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDistributedCenter(), NULL, diagnosticRequested,
-                                        LOG_REQUEST, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
 #endif
         if (argc > 1 && !strcmp(argv[1], "--status")) { printStatus(); return 0; }
         if (argc > 1 && !strcmp(argv[1], "--off")) { removeOverride(); return 0; }
 
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
+        DIAG(@"agent start");
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDistributedCenter(), NULL, diagnosticRequested,
+                                        LOG_REQUEST, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+        gDiagnosticLastEvent = CFAbsoluteTimeGetCurrent();
+        diagnosticExitWhenIdle();
+#endif
         // launchd delivers the keyboard event that started us; it must be received, or launchd starts us again
         // for the same event.
         xpc_set_event_stream_handler("com.apple.iokit.matching", dispatch_get_main_queue(), ^(xpc_object_t event) {
             DIAG(@"keyboard matching event");
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
+            gDiagnosticLastEvent = CFAbsoluteTimeGetCurrent();
+#endif
             applyNoDelay();
         });
         applyNoDelay();
@@ -71,8 +96,10 @@ int main(int argc, char **argv) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             DIAG(@"keyboard startup retry");
             applyNoDelay();
+#ifndef CAPSNOW_DIAGNOSTIC_LOG
             DIAG(@"agent exit");
             exit(0);
+#endif
         });
         dispatch_main();
     }

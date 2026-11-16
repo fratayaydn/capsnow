@@ -33,9 +33,21 @@ static CFTypeRef testCopyProperty(IOHIDEventSystemClientRef client, CFStringRef 
 #import "../Sources/Agent/capsnowd.m"
 #undef main
 
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
 static void resetLog(void) {
     for (NSUInteger i = 0; i < 500; i++) gDiagnosticEntries[i] = nil;
     gDiagnosticHead = gDiagnosticCount = 0;
+}
+
+static void testLifetime(void) {
+    assert(diagnosticExitDelay(1000, 1000) == 300);
+    assert(diagnosticExitDelay(1000, 1002) == 298);
+    assert(diagnosticExitDelay(1000, 1299.5) == 0.5);
+    assert(diagnosticExitDelay(1000, 1300) == 0);
+    assert(diagnosticExitDelay(1000, 1301) == 0);
+    // A matching event restarts the idle period; the startup retry does not.
+    assert(diagnosticExitDelay(1299, 1300) == 299);
+    assert(diagnosticExitDelay(1299, 1599) == 0);
 }
 
 static void testRing(void) {
@@ -124,24 +136,31 @@ static void testPrint(void) {
     fclose(output);
     CFNotificationCenterRemoveEveryObserver(center, NULL);
 }
+#endif
 
 static void testActions(void) {
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
     resetLog();
+#endif
     applyNoDelay();
     assert(testDelay == 0 && testWrites == 1);
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
     NSArray *entries = diagnosticRead();
     assert(entries.count == 2);
     assert([entries[0][@"text"] isEqual:@"set Caps Lock delay override=0 ms"]);
     assert([entries[1][@"text"] isEqual:@"Caps Lock delay override accepted=0 ms"]);
 
     resetLog();
+#endif
     removeOverride();
     assert(testDelay == NO_OVERRIDE && testWrites == 2);
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
     entries = diagnosticRead();
     assert(entries.count == 2);
     assert([entries[1][@"text"] isEqual:@"Caps Lock delay override accepted=-1 ms"]);
 
     resetLog();
+#endif
     testWriteAccepted = NO;
     FILE *output = tmpfile();
     assert(output);
@@ -150,26 +169,41 @@ static void testActions(void) {
     assert(saved >= 0 && dup2(fileno(output), STDERR_FILENO) >= 0);
     applyNoDelay();
     fflush(stderr);
+    long helperOutputSize = ftell(output);
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
+    entries = diagnosticRead();
+    assert(testWrites == 3 && entries.count == 2);
+    assert([entries[1][@"text"] isEqual:@"could not set the Caps Lock delay"]);
+#endif
+    char *arguments[] = {"capsnowd", "--off", NULL};
+    assert(capsnowAgentMain(2, arguments) == 0);
+    assert(testDelay == NO_OVERRIDE && testWrites == 4);
+    fflush(stderr);
     assert(dup2(saved, STDERR_FILENO) >= 0);
     close(saved);
+    assert(helperOutputSize == 0);
     rewind(output);
     char text[256];
     assert(fgets(text, sizeof(text), output));
     assert(!strcmp(text, "capsnowd: could not set the Caps Lock delay\n"));
+    assert(!fgets(text, sizeof(text), output));
     fclose(output);
-    entries = diagnosticRead();
-    assert(testWrites == 3 && entries.count == 2);
-    assert([entries[1][@"text"] isEqual:@"could not set the Caps Lock delay"]);
     testWriteAccepted = YES;
 }
 
 int main(void) {
     @autoreleasepool {
+#ifdef CAPSNOW_DIAGNOSTIC_LOG
         testRing();
         testReply();
         testPrint();
         testActions();
-        puts("Passed diagnostic checks: ring capacity, age pruning, request/reply, log output, delay actions and errors.");
+        testLifetime();
+        puts("Passed diagnostic checks: ring capacity, age pruning, request/reply, log output, delay actions and errors, idle lifetime.");
+#else
+        testActions();
+        puts("Passed release checks: delay actions and errors.");
+#endif
     }
     return 0;
 }

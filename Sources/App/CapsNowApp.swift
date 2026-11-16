@@ -9,7 +9,19 @@ let agentPlistName = "io.github.fratayaydn.capsnow.agent.plist"
 let agentJob = "gui/\(getuid())/io.github.fratayaydn.capsnow.agent"
 let capsLockDelayKey = "CapsLockDelayOverride" as CFString
 let registeredBuildKey = "RegisteredBuildID"
+let reregistrationPendingKey = "ReregistrationPending"
 let currentBuildID = Bundle.main.object(forInfoDictionaryKey: "CNBuildID") as? String ?? ""
+
+enum ReregistrationAction {
+    case none, storeBuildID, runSequence
+
+    static func decide(storedBuildID: String?, currentBuildID: String, pending: Bool,
+                       enabled: Bool) -> ReregistrationAction {
+        if pending { return .runSequence }
+        guard storedBuildID != currentBuildID else { return .none }
+        return enabled ? .runSequence : .storeBuildID
+    }
+}
 
 /// The Caps Lock delay override in the HID event system, in milliseconds; nil means none (macOS's own delay).
 func capsLockDelay() -> Int? {
@@ -48,6 +60,8 @@ final class Model: ObservableObject {
     var isEnabled: Bool { agentStatus == .enabled || agentStatus == .requiresApproval }
 
     func setEnabled(_ on: Bool) {
+        defaults.removeObject(forKey: reregistrationPendingKey)
+        defaults.synchronize()
         if on { try? agent.register() } else { try? agent.unregister() }
         if on {
             startAgentOnce()
@@ -62,11 +76,24 @@ final class Model: ObservableObject {
     /// launchd only starts the helper build that was registered when the app is signed locally (its code signature
     /// is part of the launch constraint), so after an update it is registered again, if it was enabled.
     private func reregisterAfterUpdate() {
-        guard defaults.string(forKey: registeredBuildKey) != currentBuildID else { return }
-        defaults.set(currentBuildID, forKey: registeredBuildKey)
-        guard agent.status == .enabled else { return }
+        switch ReregistrationAction.decide(storedBuildID: defaults.string(forKey: registeredBuildKey),
+                                          currentBuildID: currentBuildID,
+                                          pending: defaults.bool(forKey: reregistrationPendingKey),
+                                          enabled: agent.status == .enabled) {
+        case .none: return
+        case .storeBuildID:
+            defaults.set(currentBuildID, forKey: registeredBuildKey)
+            return
+        case .runSequence: break
+        }
+        defaults.set(true, forKey: reregistrationPendingKey)
+        defaults.synchronize()
         DispatchQueue.global().async { [weak self] in
             reregisterAgent()
+            let defaults = UserDefaults.standard
+            defaults.set(currentBuildID, forKey: registeredBuildKey)
+            defaults.removeObject(forKey: reregistrationPendingKey)
+            defaults.synchronize()
             DispatchQueue.main.async { self?.readState() }
         }
     }
@@ -163,7 +190,10 @@ func startAgentOnce() { launchctl(["kickstart", agentJob]) }
 func reregisterAgent() {
     let agent = SMAppService.agent(plistName: agentPlistName)
     try? agent.unregister()
-    for _ in 0..<70 where !launchctl(["print", agentJob]).isEmpty { Thread.sleep(forTimeInterval: 0.5) }
+    for _ in 0..<70 {
+        if launchctl(["print", agentJob]).isEmpty { break }
+        Thread.sleep(forTimeInterval: 0.5)
+    }
     Thread.sleep(forTimeInterval: 1)
     try? agent.register()
     startAgentOnce()
@@ -183,6 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 startAgentOnce()
                 // This build is registered now; the window must not re-register it again (see reregisterAfterUpdate).
                 UserDefaults.standard.set(currentBuildID, forKey: registeredBuildKey)
+                UserDefaults.standard.removeObject(forKey: reregistrationPendingKey)
                 UserDefaults.standard.synchronize()  // exit() would otherwise drop the unsaved value
                 exit(0)
             } catch {

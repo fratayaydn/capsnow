@@ -37,7 +37,7 @@ AGENT_SRC := Sources/Agent/capsnowd.m
 AGENT_HEADERS := Sources/Agent/DiagnosticLog.h
 APP_SRC   := Sources/App/CapsNowApp.swift
 
-.PHONY: all clean install uninstall signing-identity release-app dmg release test diagnostic FORCE
+.PHONY: all clean install uninstall signing-identity release-app dmg release test check-logging diagnostic FORCE
 
 all: $(APP)
 
@@ -77,7 +77,7 @@ release-app:
 	@if [ "$(DIAGNOSTIC_LOG)" != "0" ]; then echo "Release builds require DIAGNOSTIC_LOG=0."; exit 1; fi
 	@if [ -z "$(RELEASE_IDENTITY)" ]; then echo "Set RELEASE_IDENTITY (see the Makefile)."; exit 1; fi
 	rm -rf $(RELEASE_DIR)
-	$(MAKE) BUILD=$(RELEASE_DIR) SIGN_IDENTITY="$(RELEASE_IDENTITY)" TIMESTAMP=--timestamp DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS=
+	$(MAKE) BUILD=$(RELEASE_DIR) SIGN_IDENTITY="$(RELEASE_IDENTITY)" TIMESTAMP=--timestamp DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS= all check-logging
 
 # Disk image only, without notarization: for checking the window layout.
 dmg: release-app
@@ -86,10 +86,13 @@ dmg: release-app
 release: release-app
 	./scripts/release.sh $(RELEASE_DIR)/CapsNow.app $(DMG) "$(RELEASE_IDENTITY)" $(NOTARY_PROFILE)
 
-test: $(BUILD)/diagnostic-tests
+test: $(BUILD)/diagnostic-tests $(BUILD)/release-tests
 	$(BUILD)/diagnostic-tests
-	$(MAKE) BUILD=$(BUILD)/test-release SIGN_IDENTITY=- TIMESTAMP= DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS= all
-	@set -e; for executable in $(BUILD)/test-release/CapsNow.app/Contents/MacOS/*; do \
+	$(BUILD)/release-tests
+	$(MAKE) BUILD=$(BUILD)/test-release SIGN_IDENTITY=- TIMESTAMP= DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS= all check-logging
+
+check-logging: $(APP)
+	@set -e; for executable in $(APP)/Contents/MacOS/*; do \
 		symbols=$$(nm -u "$$executable"); \
 		if printf '%s\n' "$$symbols" | grep -E '(^|[[:space:]])_+(os_log[[:alnum:]_]*|NSLog[[:alnum:]_]*)([[:space:]]|$$)'; then \
 			echo "FAIL: logging symbols in $$executable"; \
@@ -101,6 +104,10 @@ test: $(BUILD)/diagnostic-tests
 $(BUILD)/diagnostic-tests: $(AGENT_SRC) $(AGENT_HEADERS) Tests/diagnostic.m
 	mkdir -p $(BUILD)
 	clang $(CFLAGS) -DCAPSNOW_DIAGNOSTIC_LOG -framework Foundation -framework IOKit Tests/diagnostic.m -o $@
+
+$(BUILD)/release-tests: $(AGENT_SRC) $(AGENT_HEADERS) Tests/diagnostic.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework IOKit Tests/diagnostic.m -o $@
 
 uninstall:
 	-pkill -x CapsNow

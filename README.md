@@ -14,7 +14,8 @@ wrong case. CapsNow turns that delay off, so a quick tap is enough.
 
 macOS already has a setting for this delay. It just isn't in System Settings, and it resets at every restart.
 CapsNow's helper sets it at login and whenever a keyboard appears, then quits, so the rest of the time CapsNow uses
-no memory and no CPU at all. There is no menu bar icon and no permission to grant. The app is about 1 MB.
+no memory and no CPU at all. There is no menu bar icon and no permission to grant at install. If you turn it off
+under System Settings > General > Login Items & Extensions, the window shows "Approval Required". The app is about 1 MB.
 
 ## Features
 
@@ -55,6 +56,7 @@ Open **CapsNow** and turn on **Enable CapsNow**. You can close the window right 
   background process: its launchd job has no `KeepAlive`. launchd runs it at login and on an IOKit "keyboard
   appeared" event, it sets the property and quits within two seconds.
 - Turning CapsNow off sets the property back to -1, the value macOS starts with, which means "no override".
+  This also removes a delay override set by other means, such as `hidutil`.
 - `CapsNow.app/Contents/MacOS/CapsNow` is the SwiftUI settings window. It runs only while open.
 
 CapsNow uses only public macOS APIs.
