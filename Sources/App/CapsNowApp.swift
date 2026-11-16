@@ -43,6 +43,7 @@ func restoreDefaultDelay() {
 final class Model: ObservableObject {
     @Published var agentStatus = SMAppService.Status.notRegistered
     @Published var delay: Int?
+    @Published var errorMessage: String?
 
     private let defaults = UserDefaults.standard
     private let agent = SMAppService.agent(plistName: agentPlistName)
@@ -62,7 +63,11 @@ final class Model: ObservableObject {
     func setEnabled(_ on: Bool) {
         defaults.removeObject(forKey: reregistrationPendingKey)
         defaults.synchronize()
-        if on { try? agent.register() } else { try? agent.unregister() }
+        do {
+            if on { try agent.register() } else { try agent.unregister() }
+        } catch {
+            errorMessage = "Could not \(on ? "enable" : "disable") CapsNow: \(error.localizedDescription)"
+        }
         if on {
             startAgentOnce()
         } else {
@@ -116,6 +121,11 @@ struct ContentView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize()
+        .alert("CapsNow", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+            Button("OK") { model.errorMessage = nil }
+        } message: {
+            Text(model.errorMessage ?? "")
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.readState()
         }
