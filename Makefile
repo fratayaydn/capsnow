@@ -35,7 +35,9 @@ DMG              := $(RELEASE_DIR)/CapsNow-$(VERSION).dmg
 
 AGENT_SRC := Sources/Agent/capsnowd.m
 AGENT_HEADERS := Sources/Agent/DiagnosticLog.h
-APP_SRC   := Sources/App/CapsNowApp.swift
+APP_SRC   := Sources/App/CapsNowApp.swift Sources/App/Updates.swift
+UPDATER_SRC := Sources/Updater/Updater.m
+UPDATER_HEADERS := Sources/Updater/Updater.h
 
 .PHONY: all clean install uninstall signing-identity release-app dmg release test check-logging diagnostic FORCE
 
@@ -55,16 +57,18 @@ signing-identity:
 	@if [ "$(SIGN_IDENTITY)" = "Local Code Signing" ]; then ./scripts/create-signing-identity.sh "$(SIGN_IDENTITY)"; fi
 
 # signing-identity is order-only (after |): it must exist, but checking for it must not force a rebuild.
-$(APP): $(AGENT_SRC) $(AGENT_HEADERS) $(APP_SRC) Resources/Info.plist Resources/$(AGENT_ID).plist $(wildcard Resources/AppIcon.icns) $(BUILD)/agent-build-mode Makefile | signing-identity
+$(APP): $(AGENT_SRC) $(AGENT_HEADERS) $(APP_SRC) $(UPDATER_SRC) $(UPDATER_HEADERS) Sources/Updater/main.m Resources/Info.plist Resources/$(AGENT_ID).plist $(wildcard Resources/AppIcon.icns) $(BUILD)/agent-build-mode Makefile | signing-identity
 	rm -rf $(STAGE)
 	mkdir -p $(BUILD)/module-cache $(CONTENTS)/MacOS $(CONTENTS)/Resources $(CONTENTS)/Library/LaunchAgents
 	clang $(CFLAGS) $(AGENT_DIAGNOSTIC_FLAGS) -framework Foundation -framework IOKit $(AGENT_SRC) -o $(CONTENTS)/MacOS/capsnowd
+	clang $(CFLAGS) -framework Foundation -framework Security $(UPDATER_SRC) Sources/Updater/main.m -o $(CONTENTS)/MacOS/capsnow-update
 	swiftc -O -module-cache-path $(BUILD)/module-cache -swift-version 5 -parse-as-library -target $(ARCH)-apple-macos$(MIN_OS) \
 		$(APP_SRC) -o $(CONTENTS)/MacOS/CapsNow
 	sed -e 's/VERSION/$(VERSION)/' -e "s/BUILD_ID/$$(date +%Y%m%d%H%M%S)/" Resources/Info.plist > $(CONTENTS)/Info.plist
 	cp Resources/$(AGENT_ID).plist $(CONTENTS)/Library/LaunchAgents/
 	if [ -f Resources/AppIcon.icns ]; then cp Resources/AppIcon.icns $(CONTENTS)/Resources/; fi
 	codesign $(SIGN_FLAGS) --identifier $(AGENT_ID) $(CONTENTS)/MacOS/capsnowd
+	codesign $(SIGN_FLAGS) --identifier io.github.fratayaydn.capsnow.update $(CONTENTS)/MacOS/capsnow-update
 	codesign $(SIGN_FLAGS) $(STAGE)
 	rm -rf $(APP)
 	mv $(STAGE) $(APP)
@@ -86,9 +90,13 @@ dmg: release-app
 release: release-app
 	./scripts/release.sh $(RELEASE_DIR)/CapsNow.app $(DMG) "$(RELEASE_IDENTITY)" $(NOTARY_PROFILE)
 
-test: $(BUILD)/diagnostic-tests $(BUILD)/release-tests
+test: $(BUILD)/diagnostic-tests $(BUILD)/release-tests $(BUILD)/updater-tests $(BUILD)/updater-tools-tests $(BUILD)/updater-flow-tests $(BUILD)/update-window-tests
 	$(BUILD)/diagnostic-tests
 	$(BUILD)/release-tests
+	$(BUILD)/updater-tests
+	$(BUILD)/updater-tools-tests
+	$(BUILD)/updater-flow-tests
+	$(BUILD)/update-window-tests
 	$(MAKE) BUILD=$(BUILD)/test-release SIGN_IDENTITY=- TIMESTAMP= DIAGNOSTIC_LOG=0 AGENT_DIAGNOSTIC_FLAGS= all check-logging
 
 check-logging: $(APP)
@@ -108,6 +116,22 @@ $(BUILD)/diagnostic-tests: $(AGENT_SRC) $(AGENT_HEADERS) Tests/diagnostic.m
 $(BUILD)/release-tests: $(AGENT_SRC) $(AGENT_HEADERS) Tests/diagnostic.m
 	mkdir -p $(BUILD)
 	clang $(CFLAGS) -framework Foundation -framework IOKit Tests/diagnostic.m -o $@
+
+$(BUILD)/updater-tests: $(UPDATER_SRC) $(UPDATER_HEADERS) Tests/updater.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework Security $(UPDATER_SRC) Tests/updater.m -o $@
+
+$(BUILD)/updater-tools-tests: $(UPDATER_SRC) $(UPDATER_HEADERS) Tests/updater-tools.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework Security Tests/updater-tools.m -o $@
+
+$(BUILD)/updater-flow-tests: $(UPDATER_SRC) $(UPDATER_HEADERS) Sources/Updater/main.m Tests/updater-flow.m
+	mkdir -p $(BUILD)
+	clang $(CFLAGS) -framework Foundation -framework Security Tests/updater-flow.m -o $@
+
+$(BUILD)/update-window-tests: Sources/App/Updates.swift Tests/update-window.swift
+	mkdir -p $(BUILD)/module-cache
+	swiftc -module-cache-path $(BUILD)/module-cache -swift-version 5 -parse-as-library Sources/App/Updates.swift Tests/update-window.swift -o $@
 
 uninstall:
 	-pkill -x CapsNow

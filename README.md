@@ -47,6 +47,13 @@ open it and drag **CapsNow** to **Applications**. The app is signed with a Devel
 
 Open **CapsNow** and turn on **Enable CapsNow**. You can close the window right after; nothing has to stay open.
 
+## Updates
+
+CapsNow never checks for updates by itself. **Check for Updates** in the window sends one request to
+`api.github.com` with only the app name and version. An available version is remembered without checking again.
+Click **Update** to check again, download and install the release. An update is installed only when it is signed
+with the same Developer ID and notarized by Apple. CapsNow then reopens with the new version.
+
 ## How it works
 
 - macOS's keyboard filter delays Caps Lock by the keyboard's own delay (75 ms on Apple keyboards) unless the HID

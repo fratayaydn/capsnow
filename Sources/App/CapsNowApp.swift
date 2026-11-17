@@ -44,6 +44,11 @@ final class Model: ObservableObject {
     @Published var agentStatus = SMAppService.Status.notRegistered
     @Published var delay: Int?
     @Published var errorMessage: String?
+    @Published var availableVersion: String?
+    @Published var updateMessage: String?
+    @Published var updateInProgress = false
+
+    let runningVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 
     private let defaults = UserDefaults.standard
     private let agent = SMAppService.agent(plistName: agentPlistName)
@@ -51,6 +56,67 @@ final class Model: ObservableObject {
     init() {
         reregisterAfterUpdate()
         readState()
+        readUpdateState()
+    }
+
+    private func readUpdateState() {
+        let domain = "io.github.fratayaydn.capsnow" as CFString
+        CFPreferencesAppSynchronize(domain)
+        availableVersion = availableUpdate(stored: CFPreferencesCopyAppValue("LatestVersion" as CFString, domain),
+                                           running: runningVersion)
+    }
+
+    func runUpdate(install: Bool) {
+        guard !updateInProgress else { return }
+        guard let tool = Bundle.main.url(forAuxiliaryExecutable: "capsnow-update") else {
+            updateMessage = "The update tool is missing."
+            return
+        }
+        updateInProgress = true
+        updateMessage = install ? "Downloading and installing update..." : "Checking for updates..."
+        let bundle = Bundle.main.bundleURL
+        DispatchQueue.global().async {
+            let process = Process()
+            process.executableURL = tool
+            process.arguments = [install ? "--install" : "--check"]
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            let success: Bool
+            do {
+                try process.run()
+                process.waitUntilExit()
+                success = process.terminationReason == .exit && process.terminationStatus == 0
+            } catch {
+                success = false
+            }
+            DispatchQueue.main.async {
+                guard success else {
+                    self.updateInProgress = false
+                    self.updateMessage = install ? "Could not install the update. Try again." : "Could not check for updates. Try again."
+                    return
+                }
+                if install {
+                    self.updateMessage = "Relaunching CapsNow..."
+                    let configuration = NSWorkspace.OpenConfiguration()
+                    configuration.createsNewApplicationInstance = true
+                    NSWorkspace.shared.openApplication(at: bundle, configuration: configuration) { _, error in
+                        DispatchQueue.main.async {
+                            if error == nil {
+                                NSApplication.shared.terminate(nil)
+                            } else {
+                                self.updateInProgress = false
+                                self.updateMessage = "Updated. Close and reopen CapsNow."
+                            }
+                        }
+                    }
+                } else {
+                    self.readUpdateState()
+                    self.updateMessage = self.availableVersion == nil ? "CapsNow is up to date" : nil
+                    self.updateInProgress = false
+                }
+            }
+        }
     }
 
     func readState() {
@@ -117,6 +183,31 @@ struct ContentView: View {
                 }
                 statusRow
             }
+            Section("Updates") {
+                HStack {
+                    Text("Version \(model.runningVersion)")
+                    Spacer()
+                    Button("Check for Updates") { model.runUpdate(install: false) }
+                }
+                if model.updateMessage != nil || model.availableVersion != nil {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            if let version = model.availableVersion {
+                                Text("Version \(version) is available")
+                            }
+                            if let message = model.updateMessage {
+                                Text(message).foregroundStyle(.secondary)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        if model.availableVersion != nil {
+                            Button("Update") { model.runUpdate(install: true) }
+                        }
+                    }
+                }
+            }
+            .disabled(model.updateInProgress)
         }
         .formStyle(.grouped)
         .frame(width: 460)
