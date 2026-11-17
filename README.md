@@ -15,7 +15,7 @@ wrong case. CapsNow turns that delay off, so a quick tap is enough.
 macOS already has a setting for this delay. It just isn't in System Settings, and it resets at every restart.
 CapsNow's helper sets it at login and whenever a keyboard appears, then quits, so the rest of the time CapsNow uses
 no memory and no CPU at all. There is no menu bar icon and no permission to grant at install. If you turn it off
-under System Settings > General > Login Items & Extensions, the window shows "Approval Required". The app is about 1 MB.
+under System Settings > General > Login Items & Extensions, the window shows "Approval Required". The app is about 1.2 MB.
 
 ## Features
 
