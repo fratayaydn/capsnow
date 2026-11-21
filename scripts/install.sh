@@ -30,6 +30,10 @@ reregister() {
     sleep 3  # the helper runs for about 2 s
 }
 
+STAGING=$(mktemp -d "$(dirname "$APP")/.CapsNow-install.XXXXXX")
+trap 'rm -rf "$STAGING"' EXIT
+cp -R "$BUILD" "$STAGING/CapsNow.app"
+
 pkill -x CapsNow || true
 enabled=no
 launchctl print "$JOB" >/dev/null 2>&1 && enabled=yes
@@ -39,7 +43,7 @@ if [ -x "$CLI" ]; then
 fi
 
 rm -rf "$APP"
-cp -R "$BUILD" "$APP"
+mv "$STAGING/CapsNow.app" "$APP"
 
 if [ "$enabled" = yes ]; then
     reregister
