@@ -160,15 +160,19 @@ final class Model: ObservableObject {
         defaults.set(true, forKey: reregistrationPendingKey)
         defaults.synchronize()
         DispatchQueue.global().async { [weak self] in
-            let success = reregisterAgent()
-            if success {
+            let result = reregisterAgent()
+            switch result {
+            case .registered, .skipped:
                 let defaults = UserDefaults.standard
                 defaults.set(currentBuildID, forKey: registeredBuildKey)
-                defaults.removeObject(forKey: reregistrationPendingKey)
+                if result == .registered {
+                    defaults.removeObject(forKey: reregistrationPendingKey)
+                }
                 defaults.synchronize()
+            case .failed: break
             }
             DispatchQueue.main.async {
-                if !success {
+                if result == .failed {
                     self?.errorMessage = "Could not enable CapsNow after the update. Close and reopen CapsNow to try again."
                 }
                 self?.readState()
@@ -293,9 +297,13 @@ func launchctl(_ arguments: [String]) -> String {
 /// (see scripts/install.sh).
 func startAgentOnce() { launchctl(["kickstart", agentJob]) }
 
+enum ReregistrationResult {
+    case registered, skipped, failed
+}
+
 /// Unregister, wait until launchd has dropped the job, register and run once: the sequence that refreshes the
 /// helper's launch constraint after an update (see scripts/install.sh).
-func reregisterAgent() -> Bool {
+func reregisterAgent() -> ReregistrationResult {
     let agent = SMAppService.agent(plistName: agentPlistName)
     try? agent.unregister()
     for _ in 0..<70 {
@@ -303,10 +311,11 @@ func reregisterAgent() -> Bool {
         Thread.sleep(forTimeInterval: 0.5)
     }
     Thread.sleep(forTimeInterval: 1)
+    guard UserDefaults.standard.bool(forKey: reregistrationPendingKey) else { return .skipped }
     try? agent.register()
     let success = agent.status == .enabled || agent.status == .requiresApproval
     startAgentOnce()
-    return success
+    return success ? .registered : .failed
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
