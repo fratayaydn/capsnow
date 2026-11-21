@@ -160,12 +160,19 @@ final class Model: ObservableObject {
         defaults.set(true, forKey: reregistrationPendingKey)
         defaults.synchronize()
         DispatchQueue.global().async { [weak self] in
-            reregisterAgent()
-            let defaults = UserDefaults.standard
-            defaults.set(currentBuildID, forKey: registeredBuildKey)
-            defaults.removeObject(forKey: reregistrationPendingKey)
-            defaults.synchronize()
-            DispatchQueue.main.async { self?.readState() }
+            let success = reregisterAgent()
+            if success {
+                let defaults = UserDefaults.standard
+                defaults.set(currentBuildID, forKey: registeredBuildKey)
+                defaults.removeObject(forKey: reregistrationPendingKey)
+                defaults.synchronize()
+            }
+            DispatchQueue.main.async {
+                if !success {
+                    self?.errorMessage = "Could not enable CapsNow after the update. Close and reopen CapsNow to try again."
+                }
+                self?.readState()
+            }
         }
     }
 }
@@ -288,7 +295,7 @@ func startAgentOnce() { launchctl(["kickstart", agentJob]) }
 
 /// Unregister, wait until launchd has dropped the job, register and run once: the sequence that refreshes the
 /// helper's launch constraint after an update (see scripts/install.sh).
-func reregisterAgent() {
+func reregisterAgent() -> Bool {
     let agent = SMAppService.agent(plistName: agentPlistName)
     try? agent.unregister()
     for _ in 0..<70 {
@@ -297,7 +304,9 @@ func reregisterAgent() {
     }
     Thread.sleep(forTimeInterval: 1)
     try? agent.register()
+    let success = agent.status == .enabled || agent.status == .requiresApproval
     startAgentOnce()
+    return success
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
