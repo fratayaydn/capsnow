@@ -52,6 +52,7 @@ final class Model: ObservableObject {
 
     private let defaults = UserDefaults.standard
     private let agent = SMAppService.agent(plistName: agentPlistName)
+    private var reregistering = false
 
     init() {
         reregisterAfterUpdate()
@@ -120,13 +121,14 @@ final class Model: ObservableObject {
     }
 
     func readState() {
-        agentStatus = agent.status
+        if !reregistering { agentStatus = agent.status }
         delay = capsLockDelay()
     }
 
     var isEnabled: Bool { agentStatus == .enabled || agentStatus == .requiresApproval }
 
     func setEnabled(_ on: Bool) {
+        reregistering = false
         defaults.removeObject(forKey: reregistrationPendingKey)
         defaults.synchronize()
         do {
@@ -159,6 +161,8 @@ final class Model: ObservableObject {
         }
         defaults.set(true, forKey: reregistrationPendingKey)
         defaults.synchronize()
+        agentStatus = agent.status  // shown until the sequence ends
+        reregistering = true
         DispatchQueue.global().async { [weak self] in
             let result = reregisterAgent()
             switch result {
@@ -175,6 +179,7 @@ final class Model: ObservableObject {
                 if result == .failed {
                     self?.errorMessage = "Could not enable CapsNow after the update. Close and reopen CapsNow to try again."
                 }
+                self?.reregistering = false
                 self?.readState()
             }
         }
