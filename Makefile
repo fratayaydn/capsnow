@@ -1,6 +1,6 @@
 # CapsNow: `make` builds .build/CapsNow.app (hidden, so Spotlight does not list the build copy), `make install` copies it to /Applications and opens it.
 # `make dmg` builds the disk image; `make release` builds, notarizes and staples it (Developer ID required).
-VERSION  := 1.0.1
+VERSION  := 1.0.2
 BUILD    ?= .build
 APP      := $(BUILD)/CapsNow.app
 STAGE    := $(BUILD)/stage/CapsNow.app
